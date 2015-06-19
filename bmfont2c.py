@@ -146,8 +146,8 @@ class FontConfig:
         # Glyph sizing
         self.bytes_width  = cfg.getint(section, "BytesWidth")
         self.bytes_height = cfg.getint(section, "BytesHeight")
-        self.crop_x       = cfg.getint(section, "CropX")
-        self.crop_y       = cfg.getint(section, "CropY")
+        self.crop_x       = cfg.getint(section, "CropX", fallback=0)
+        self.crop_y       = cfg.getint(section, "CropY", fallback=0)
 
         if cfg.has_option(section, "Strings"):
             strings_file = cfg.get(section, "Strings")

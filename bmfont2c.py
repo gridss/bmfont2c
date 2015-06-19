@@ -90,6 +90,8 @@ from xml.dom import minidom
 import sys
 import os
 
+datatype = 'uint8_t'
+extra_bitmap_type_specifier = ''
 
 header_start = """
 //
@@ -102,15 +104,16 @@ header_start = """
 #include <stdint.h>
 
 typedef struct
-{
-    uint8_t GlyphCount;
-    uint8_t FirstAsciiCode;
-    uint8_t GlyphBytesWidth;
-    uint8_t GlyphHeight;
-    uint8_t FixedWidth;
-    uint8_t const *GlyphWidth;
-    uint8_t const *GlyphBitmaps;
-} fontStyle_t;
+{{
+    {datatype} GlyphCount;
+    {datatype} FirstAsciiCode;
+    {datatype} GlyphBytesWidth;
+    {datatype} GlyphHeight;
+    {datatype} FixedWidth;
+    {datatype} const *GlyphWidth;
+    {datatype} const *GlyphBitmaps;
+    {datatype} const *GlyphOffsets;
+}} fontStyle_t;
 
 """
 
@@ -126,10 +129,8 @@ source_start = """
 //
 
 #include <stdint.h>
-#include <avr/pgmspace.h>
+#include <stdlib.h>
 """
-
-c_datatype = "static uint8_t const PROGMEM"
 
 total_ram = 0
 
@@ -158,15 +159,14 @@ class Config:
         if cfg.has_option(section, "FixedWidth"):
             self.fixed_width = cfg.getint(section, "FixedWidth")
         else:
-            self.fixed_width = 0;
-
+            self.fixed_width = 0
 
 def loadStringsCharSet(strings_file):
-	'''Load strings from a file, create a set with characters used.'''
-	with open(strings_file) as f:
-		strings = f.readlines()
+    '''Load strings from a file, create a set with characters used.'''
+    with open(strings_file) as f:
+        strings = f.readlines()
 
-	return set(''.join(strings).replace('\n', ''))
+    return set(''.join(strings).replace('\n', ''))
 
 
 def makeFontStyleDecl(config):
@@ -181,7 +181,7 @@ def makeFontStyleDecl(config):
         s += "    %s_Widths,\n" % config.c_fontname
     else:
         s += "    (void*)0,\n"
-    s += "    %s_Bitmaps\n" % config.c_fontname
+    s += "    %s_Bitmaps,\n" % config.c_fontname
     if config.chars:
         s += "    {}_Offsets\n".format(config.c_fontname)
     else:
@@ -217,7 +217,9 @@ def makeBitmapsOffsetTable(config):
 
 def makeBitmapsTable(config, img, glyphs):
     size = (config.last_ascii - config.first_ascii + 1) * config.bytes_width * config.bytes_height
-    s = "\n%s %s_Bitmaps[] = \n{" % (c_datatype, config.c_fontname)
+    s = "\nstatic const %s %s %s_Bitmaps[] = \n{" % (datatype,
+                                                     extra_bitmap_type_specifier,
+                                                     config.c_fontname)
     global total_ram
     total_ram += size
 
@@ -249,7 +251,7 @@ def makeBitmapsTable(config, img, glyphs):
 
 def makeWidthsTable(config, glyphs):
     count = config.last_ascii - config.first_ascii + 1
-    s = "\n%s %s_Widths[%u] = \n{" % (c_datatype, config.c_fontname, count)
+    s = "\n%s %s_Widths[%u] = \n{" % (datatype, config.c_fontname, count)
     i = 0
     global total_ram
     total_ram += count
@@ -320,7 +322,7 @@ def processConfig(cfg):
     output_source = cfg.get("General", "OutputSource")
 
     # Start up the header and source file
-    header = header_start
+    header = header_start.format(datatype=datatype)
     source = source_start
     source += '#include "%s"\n' % output_header
 

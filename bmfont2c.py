@@ -214,9 +214,7 @@ def makeBitmapsOffsetTable(config):
     i = 0
     n = 0
     for ascii in range(config.first_ascii, config.last_ascii + 1):
-        char = chr(ascii)
-
-        if config.chars and char in config.chars:
+        if config.chars and chr(ascii)in config.chars:
             s += '{: 2}, '.format(n)
             n = n + 1
         else:
@@ -239,8 +237,7 @@ def makeBitmapsTable(config, img, glyphs):
     total_ram += size
 
     for ascii in range(config.first_ascii, config.last_ascii + 1):
-        char = chr(ascii)
-        if config.chars and char not in config.chars:
+        if config.chars and char(ascii) not in config.chars:
             continue
 
         # Find the glyph
@@ -272,8 +269,7 @@ def makeWidthsTable(config, glyphs):
     total_ram += count
 
     for ascii in range(config.first_ascii, config.last_ascii + 1):
-        char = chr(ascii)
-        if config.chars and char not in config.chars:
+        if config.chars and chr(ascii) not in config.chars:
             continue
 
         # Find the glyph

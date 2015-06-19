@@ -134,8 +134,7 @@ source_start = """
 
 total_ram = 0
 
-
-class Config:
+class FontConfig:
     def __init__(self, cfg, section):
         self.font_input  = cfg.get(section, "InputFile")
         self.c_fontname  = cfg.get(section, "CFontName")
@@ -332,7 +331,7 @@ def processConfig(cfg):
     total_ram = 0
 
     while cfg.has_section("Font%d" % font_no):
-        config = Config(cfg, "Font%d" % font_no)
+        config = FontConfig(cfg, "Font%d" % font_no)
         source = source + makeFontSource(config)
         header = header + makeFontStyleHeader(config)
         font_no += 1

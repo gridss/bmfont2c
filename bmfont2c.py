@@ -149,10 +149,24 @@ class Config:
         self.crop_x       = cfg.getint(section, "CropX")
         self.crop_y       = cfg.getint(section, "CropY")
 
+        if cfg.has_option(section, "Strings"):
+            strings_file = cfg.get(section, "Strings")
+            self.chars = loadStringsCharSet(strings_file)
+        else:
+            self.chars = None
+
         if cfg.has_option(section, "FixedWidth"):
             self.fixed_width = cfg.getint(section, "FixedWidth")
         else:
             self.fixed_width = 0;
+
+
+def loadStringsCharSet(strings_file):
+	'''Load strings from a file, create a set with characters used.'''
+	with open(strings_file) as f:
+		strings = f.readlines()
+
+	return set(''.join(strings).replace('\n', ''))
 
 
 def makeFontStyleDecl(config):
@@ -168,6 +182,10 @@ def makeFontStyleDecl(config):
     else:
         s += "    (void*)0,\n"
     s += "    %s_Bitmaps\n" % config.c_fontname
+    if config.chars:
+        s += "    {}_Offsets\n".format(config.c_fontname)
+    else:
+        s += "    (void*)0,\n"
     s += "};\n"
     return s
 
@@ -175,13 +193,39 @@ def makeFontStyleHeader(config):
     return "\nextern fontStyle_t FontStyle_%s;" % config.c_fontname
 
 
+def makeBitmapsOffsetTable(config):
+    s = '\nint8_t {}_Offsets[] = \n{{\n    '.format(config.c_fontname)
+
+    i = 0
+    n = 0
+    for ascii in range(config.first_ascii, config.last_ascii + 1):
+        char = chr(ascii)
+
+        if config.chars and char in config.chars:
+            s += '{: 2}, '.format(n)
+            n = n + 1
+        else:
+            s += '-1, '
+
+        i = i + 1
+        if i % 8 == 0:
+            s += '\n    '
+
+    s += '\n}\n'
+
+    return s
+
 def makeBitmapsTable(config, img, glyphs):
     size = (config.last_ascii - config.first_ascii + 1) * config.bytes_width * config.bytes_height
-    s = "\n%s %s_Bitmaps[%u] = \n{" % (c_datatype, config.c_fontname, size)
+    s = "\n%s %s_Bitmaps[] = \n{" % (c_datatype, config.c_fontname)
     global total_ram
     total_ram += size
 
     for ascii in range(config.first_ascii, config.last_ascii + 1):
+        char = chr(ascii)
+        if config.chars and char not in config.chars:
+            continue
+
         # Find the glyph
         glyph_found = None
         for glyph in glyphs:
@@ -211,6 +255,10 @@ def makeWidthsTable(config, glyphs):
     total_ram += count
 
     for ascii in range(config.first_ascii, config.last_ascii + 1):
+        char = chr(ascii)
+        if config.chars and char not in config.chars:
+            continue
+
         # Find the glyph
         glyph_found = None
         for glyph in glyphs:
@@ -258,6 +306,9 @@ def makeFontSource(config):
 
     if config.fixed_width == 0:
         source += makeWidthsTable(config, glyphs)
+
+    if config.chars:
+        source += makeBitmapsOffsetTable(config)
 
     source += makeFontStyleDecl(config)
 

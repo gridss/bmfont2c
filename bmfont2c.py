@@ -89,6 +89,7 @@ from PIL import Image as image
 from xml.dom import minidom
 import sys
 import os
+import re
 
 datatype = 'uint8_t'
 extra_bitmap_type_specifier = ''
@@ -133,6 +134,21 @@ source_start = """
 """
 
 total_ram = 0
+
+class Config:
+    '''Top-level config'''
+    def __init__(self, cfg):
+        # List of FontConfigs
+        self.font_configs = []
+
+        self.header = cfg.get('General', 'OutputHeader',
+                              fallback='fontlibrary.h')
+        self.source = cfg.get('General', 'OutputSource',
+                              fallback='fontlibrary.c')
+
+        for sec in cfg.sections():
+            if re.fullmatch('Font[0-9]+', sec):
+                self.font_configs.append(FontConfig(cfg, sec))
 
 class FontConfig:
     def __init__(self, cfg, section):
@@ -316,38 +332,31 @@ def makeFontSource(config):
     return source
 
 def processConfig(cfg):
-    # Get the general configuration
-    output_header = cfg.get("General", "OutputHeader")
-    output_source = cfg.get("General", "OutputSource")
 
     # Start up the header and source file
     header = header_start.format(datatype=datatype)
     source = source_start
-    source += '#include "%s"\n' % output_header
-
-    font_no = 1
+    source += '#include "{}"\n'.format(cfg.header)
 
     global total_ram
     total_ram = 0
 
-    while cfg.has_section("Font%d" % font_no):
-        config = FontConfig(cfg, "Font%d" % font_no)
-        source = source + makeFontSource(config)
-        header = header + makeFontStyleHeader(config)
-        font_no += 1
+    for font_cfg in cfg.font_configs:
+        source = source + makeFontSource(font_cfg)
+        header = header + makeFontStyleHeader(font_cfg)
 
     header += header_end
 
     print("INFO: Font tables use: %u bytes" % total_ram)
 
-    print("Writing output: " + output_source)
+    print('Writing source: {}'.format(cfg.source))
 
-    with open(output_source, "w") as text_file:
+    with open(cfg.source, 'w') as text_file:
         text_file.write(source)
 
-    print("Writing output: " + output_header)
+    print('Writing header: {}'.format(cfg.header))
 
-    with open(output_header, "w") as text_file:
+    with open(cfg.header, 'w') as text_file:
         text_file.write(header)
 
 
@@ -441,9 +450,10 @@ if __name__ == "__main__":
         exit()
 
     if os.path.isfile(cfgfile):
-        print("Reading configuration file: " + cfgfile)
+        print('Reading configuration file: {}'.format(cfgfile))
         cfg = configparser.ConfigParser()
         cfg.read(cfgfile)
+        cfg = Config(cfg)
         processConfig(cfg)
     else:
         print("ERROR: Configuration file '%s' not found\n" % cfgfile)

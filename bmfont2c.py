@@ -92,7 +92,6 @@ import os
 import re
 import yaml
 
-extra_bitmap_type_specifier = ''
 
 header_start = """
 //
@@ -141,6 +140,7 @@ default_last_ascii = 125
 default_crop_x = 0
 default_crop_y = 0
 default_fixed_width = False
+default_extra_bitmap_type_specifier = ''
 
 class InvalidConfigException(Exception):
 
@@ -169,6 +169,10 @@ class Config:
         self.datatype = cfg.get('datatype', default_datatype)
         if type(self.datatype) != str:
             raise InvalidConfigException('datatype should be a string.')
+
+        self.extra_bitmap_type_specifier = cfg.get(
+            'extra-bitmap-type-specifier',
+            default_extra_bitmap_type_specifier)
 
         if 'fonts' not in cfg:
             raise InvalidConfigException('no fonts defined')
@@ -290,7 +294,7 @@ def makeBitmapsOffsetTable(config):
 
 def makeBitmapsTable(config, img, glyphs):
     s = "\nstatic const %s %s %s_Bitmaps[] = \n{" % (config.parent.datatype,
-                                                     extra_bitmap_type_specifier,
+                                                     config.parent.extra_bitmap_type_specifier,
                                                      config.font_c_name)
 
     for ascii in range(config.first_ascii, config.last_ascii + 1):

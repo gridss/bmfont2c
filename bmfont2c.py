@@ -134,13 +134,10 @@ source_start = """
 #include <stdlib.h>
 """
 
-total_ram = 0
 default_header = 'fontlibrary.h'
 default_source = 'fontlibrary.c'
 default_first_ascii = 32
 default_last_ascii = 125
-default_bytes_width = -1 # auto
-default_pixel_height = -1 # auto
 default_crop_x = 0
 default_crop_y = 0
 default_fixed_width = False
@@ -209,16 +206,6 @@ class FontConfig:
             raise InvalidConfigException(e.format(font_c_name))
 
         # Glyph sizing
-        self.bytes_width  = cfg.get("bytes-width", default_bytes_width)
-        if type(self.bytes_width) != int:
-            e = 'bytes-width in {} should be an int.'
-            raise InvalidConfigException(e.format(font_c_name))
-
-        self.pixel_height = cfg.get("pixel-height", default_pixel_height)
-        if type(self.pixel_height) != int:
-            e = 'bytes-width in {} should be an int.'
-            raise InvalidConfigException(e.format(font_c_name))
-
         self.crop_x = cfg.get("crop-x", default_crop_x)
         if type(self.crop_x) != int:
             e = 'crop-x in {} should be an int.'
@@ -257,7 +244,7 @@ def makeFontStyleDecl(config):
     s += "{\n"
     s += "    %d, // Glyph count\n" % (config.last_ascii - config.first_ascii + 1)
     s += "    %d, // First ascii code\n" % config.first_ascii
-    s += "    %d, // Glyph width (bytes)\n" % config.bytes_width
+    s += "    %d, // Glyph width (bytes)\n" % ((config.pixel_width + 7) // 8)
     s += "    %d, // Glyph height (bytes)\n" % config.pixel_height
     s += "    %d, // Fixed width or 0 if variable\n" % config.fixed_width
     if config.fixed_width == 0:
@@ -297,12 +284,9 @@ def makeBitmapsOffsetTable(config):
     return s
 
 def makeBitmapsTable(config, img, glyphs):
-    size = (config.last_ascii - config.first_ascii + 1) * config.bytes_width * config.pixel_height
     s = "\nstatic const %s %s %s_Bitmaps[] = \n{" % (datatype,
                                                      extra_bitmap_type_specifier,
                                                      config.font_c_name)
-    global total_ram
-    total_ram += size
 
     for ascii in range(config.first_ascii, config.last_ascii + 1):
         if config.chars and char(ascii) not in config.chars:
@@ -321,8 +305,11 @@ def makeBitmapsTable(config, img, glyphs):
             # We use first glyph instead
             glyph_found = glyphs[0]
 
-        s += glyph_found.makeBitmapCode(img, config.bytes_width * 8, config.pixel_height,
-                             config.crop_x, config.crop_y)
+        s += glyph_found.makeBitmapCode(img,
+                                        config.pixel_width,
+                                        config.pixel_height,
+                                        config.crop_x,
+                                        config.crop_y)
 
     s += "};\n"
 
@@ -333,8 +320,6 @@ def makeWidthsTable(config, glyphs):
     count = config.last_ascii - config.first_ascii + 1
     s = "\n%s %s_Widths[%u] = \n{" % (datatype, config.font_c_name, count)
     i = 0
-    global total_ram
-    total_ram += count
 
     for ascii in range(config.first_ascii, config.last_ascii + 1):
         if config.chars and chr(ascii) not in config.chars:
@@ -383,13 +368,11 @@ def loadFont(config):
 def makeFontSource(config):
     img, glyphs = loadFont(config)
 
-    if config.pixel_height == default_pixel_height:
-        # Auto-compute required height
-        max_height = 0
-        for g in glyphs:
-            max_height = max(max_height, g.height)
-        config.pixel_height = max_height
-        print('Auto-detected required height of {}px'.format(max_height))
+    # Auto-compute required height and width
+    config.pixel_height = max([x.height + x.yoffset for x in glyphs])
+    config.pixel_width = max([x.width + x.xoffset for x in glyphs])
+    print('Auto-detected required height of {}px'.format(config.pixel_height))
+    print('Auto-detected required width of {}px'.format(config.pixel_width))
 
     source = makeBitmapsTable(config, img, glyphs)
 
@@ -410,16 +393,12 @@ def processConfig(cfg):
     source = source_start
     source += '#include "{}"\n'.format(cfg.header)
 
-    global total_ram
-    total_ram = 0
 
     for font_cfg in cfg.font_configs:
         source = source + makeFontSource(font_cfg)
         header = header + makeFontStyleHeader(font_cfg)
 
     header += header_end
-
-    print("INFO: Font tables use: %u bytes" % total_ram)
 
     print('Writing source: {}'.format(cfg.source))
 
@@ -477,6 +456,8 @@ class Glyph:
 
     def makeBitmapCode(self, img, width, height, crop_x, crop_y):
         s = '\n    // ASCII: %d, char width: %d' % (self.id, self.xadvance)
+
+        # Find number of integral bytes needed
         for y in range(0, height):
             comment = ""
             bytestring = ""
@@ -486,7 +467,8 @@ class Glyph:
                 use_x = x - self.xoffset + crop_x
                 use_y = y - self.yoffset + crop_y
                 pixel = 0
-                if (use_x >= 0) and (use_x < self.width) and (use_y >= 0) and (use_y < self.height):
+                if use_x >= 0 and use_x < self.width and \
+                   use_y >= 0 and use_y < self.height:
                     if img.getpixel((use_x + self.x, use_y + self.y)) > 127:
                         pixel = 1
 

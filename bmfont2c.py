@@ -140,7 +140,7 @@ default_source = 'fontlibrary.c'
 default_first_ascii = 32
 default_last_ascii = 125
 default_bytes_width = -1 # auto
-default_bytes_height = -1 # auto
+default_pixel_height = -1 # auto
 default_crop_x = 0
 default_crop_y = 0
 default_fixed_width = False
@@ -214,8 +214,8 @@ class FontConfig:
             e = 'bytes-width in {} should be an int.'
             raise InvalidConfigException(e.format(font_c_name))
 
-        self.bytes_height = cfg.get("bytes-height", default_bytes_height)
-        if type(self.bytes_height) != int:
+        self.pixel_height = cfg.get("pixel-height", default_pixel_height)
+        if type(self.pixel_height) != int:
             e = 'bytes-width in {} should be an int.'
             raise InvalidConfigException(e.format(font_c_name))
 
@@ -258,7 +258,7 @@ def makeFontStyleDecl(config):
     s += "    %d, // Glyph count\n" % (config.last_ascii - config.first_ascii + 1)
     s += "    %d, // First ascii code\n" % config.first_ascii
     s += "    %d, // Glyph width (bytes)\n" % config.bytes_width
-    s += "    %d, // Glyph height (bytes)\n" % config.bytes_height
+    s += "    %d, // Glyph height (bytes)\n" % config.pixel_height
     s += "    %d, // Fixed width or 0 if variable\n" % config.fixed_width
     if config.fixed_width == 0:
         s += "    %s_Widths,\n" % config.font_c_name
@@ -297,7 +297,7 @@ def makeBitmapsOffsetTable(config):
     return s
 
 def makeBitmapsTable(config, img, glyphs):
-    size = (config.last_ascii - config.first_ascii + 1) * config.bytes_width * config.bytes_height
+    size = (config.last_ascii - config.first_ascii + 1) * config.bytes_width * config.pixel_height
     s = "\nstatic const %s %s %s_Bitmaps[] = \n{" % (datatype,
                                                      extra_bitmap_type_specifier,
                                                      config.font_c_name)
@@ -321,7 +321,7 @@ def makeBitmapsTable(config, img, glyphs):
             # We use first glyph instead
             glyph_found = glyphs[0]
 
-        s += glyph_found.makeBitmapCode(img, config.bytes_width * 8, config.bytes_height,
+        s += glyph_found.makeBitmapCode(img, config.bytes_width * 8, config.pixel_height,
                              config.crop_x, config.crop_y)
 
     s += "};\n"
@@ -383,12 +383,12 @@ def loadFont(config):
 def makeFontSource(config):
     img, glyphs = loadFont(config)
 
-    if config.bytes_height == default_bytes_height:
+    if config.pixel_height == default_pixel_height:
         # Auto-compute required height
         max_height = 0
         for g in glyphs:
             max_height = max(max_height, g.height)
-        config.bytes_height = max_height
+        config.pixel_height = max_height
         print('Auto-detected required height of {}px'.format(max_height))
 
     source = makeBitmapsTable(config, img, glyphs)

@@ -215,7 +215,7 @@ class FontConfig:
             raise InvalidConfigException(e.format(font_c_name))
 
         self.bytes_height = cfg.get("bytes-height", default_bytes_height)
-        if type(self.bytes_width) != int:
+        if type(self.bytes_height) != int:
             e = 'bytes-width in {} should be an int.'
             raise InvalidConfigException(e.format(font_c_name))
 
@@ -225,7 +225,7 @@ class FontConfig:
             raise InvalidConfigException(e.format(font_c_name))
 
         self.crop_y = cfg.get("crop-y", default_crop_y)
-        if type(self.bytes_width) != int:
+        if type(self.crop_y) != int:
             e = 'crop-y in {} should be an int.'
             raise InvalidConfigException(e.format(font_c_name))
 

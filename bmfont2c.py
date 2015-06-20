@@ -90,6 +90,7 @@ from xml.dom import minidom
 import sys
 import os
 import re
+import yaml
 
 datatype = 'uint8_t'
 extra_bitmap_type_specifier = ''
@@ -134,47 +135,114 @@ source_start = """
 """
 
 total_ram = 0
+default_header = 'fontlibrary.h'
+default_source = 'fontlibrary.c'
+default_first_ascii = 32
+default_last_ascii = 125
+default_bytes_width = -1 # auto
+default_bytes_height = -1 # auto
+default_crop_x = 0
+default_crop_y = 0
+default_fixed_width = False
+
+class InvalidConfigException(Exception):
+
+    def __init__(self, what):
+        self._what = what
+
+    def __str__(self):
+        return self.what
+
 
 class Config:
     '''Top-level config'''
+
     def __init__(self, cfg):
         # List of FontConfigs
         self.font_configs = []
 
-        self.header = cfg.get('General', 'OutputHeader',
-                              fallback='fontlibrary.h')
-        self.source = cfg.get('General', 'OutputSource',
-                              fallback='fontlibrary.c')
+        self.header = cfg.get('header', default_header)
+        if type(self.header) != str:
+            raise InvalidConfigException('header should be a string.')
 
-        for sec in cfg.sections():
-            if re.fullmatch('Font[0-9]+', sec):
-                self.font_configs.append(FontConfig(cfg, sec))
+        self.source = cfg.get('source', default_source)
+        if type(self.source) != str:
+            raise InvalidConfigException('source should be a string.')
+
+        if 'fonts' not in cfg:
+            raise InvalidConfigException('no fonts defined')
+
+        if type(cfg['fonts']) != dict:
+            raise InvalidConfigException('fonts should be a dictionary')
+
+        for font_c_name, font_cfg in cfg['fonts'].items():
+            if type(font_cfg) != dict:
+                e = 'value of font {} should be a dictionary'
+                raise InvalidConfigException(e.format(font_c_name))
+
+            self.font_configs.append(FontConfig(font_c_name, font_cfg))
+
 
 class FontConfig:
-    def __init__(self, cfg, section):
-        self.font_input  = cfg.get(section, "InputFile")
-        self.c_fontname  = cfg.get(section, "CFontName")
+
+    def __init__(self, font_c_name, cfg):
+        self.font_c_name = font_c_name
+
+        if 'input-file' not in cfg:
+            e = 'input-file is missing in {}.'
+            raise InvalidConfigException(e.format(font_c_name))
+
+        self.input_file = cfg['input-file']
+        if type(self.input_file) != str:
+            e = 'input-file in {} should be a string.'
+            raise InvalidConfigException(e.format(font_c_name))
 
         # Ascii range to grab
-        self.first_ascii  = cfg.getint(section, "FirstAscii")
-        self.last_ascii   = cfg.getint(section, "LastAscii")
+        self.first_ascii = cfg.get('first-ascii', default_first_ascii)
+        if type(self.first_ascii) != int:
+            e = 'first-ascii in {} should be an int.'
+            raise InvalidConfigException(e.format(font_c_name))
+
+        self.last_ascii = cfg.get('last-ascii', default_last_ascii)
+        if type(self.last_ascii) != int:
+            e = 'last-ascii in {} should be an int.'
+            raise InvalidConfigException(e.format(font_c_name))
 
         # Glyph sizing
-        self.bytes_width  = cfg.getint(section, "BytesWidth")
-        self.bytes_height = cfg.getint(section, "BytesHeight")
-        self.crop_x       = cfg.getint(section, "CropX", fallback=0)
-        self.crop_y       = cfg.getint(section, "CropY", fallback=0)
+        self.bytes_width  = cfg.get("bytes-width", default_bytes_width)
+        if type(self.bytes_width) != int:
+            e = 'bytes-width in {} should be an int.'
+            raise InvalidConfigException(e.format(font_c_name))
 
-        if cfg.has_option(section, "Strings"):
-            strings_file = cfg.get(section, "Strings")
-            self.chars = loadStringsCharSet(strings_file)
+        self.bytes_height = cfg.get("bytes-height", default_bytes_height)
+        if type(self.bytes_width) != int:
+            e = 'bytes-width in {} should be an int.'
+            raise InvalidConfigException(e.format(font_c_name))
+
+        self.crop_x = cfg.get("crop-x", default_crop_x)
+        if type(self.crop_x) != int:
+            e = 'crop-x in {} should be an int.'
+            raise InvalidConfigException(e.format(font_c_name))
+
+        self.crop_y = cfg.get("crop-y", default_crop_y)
+        if type(self.bytes_width) != int:
+            e = 'crop-y in {} should be an int.'
+            raise InvalidConfigException(e.format(font_c_name))
+
+        self.fixed_width = cfg.get("fixed-width", default_fixed_width)
+        if type(self.fixed_width) != bool:
+            e = 'fixed-width in {} should be a bool.'
+            raise InvalidConfigException(e.format(font_c_name))
+
+        if 'strings-file' in cfg:
+            if type(cfg['strings-file']) != str:
+                e = 'strings-file in {} should be a string.'
+                raise InvalidConfigException(e.format(font_c_name))
+
+            self.chars = loadStringsCharSet(cfg['strings-file'])
         else:
             self.chars = None
 
-        if cfg.has_option(section, "FixedWidth"):
-            self.fixed_width = cfg.getint(section, "FixedWidth")
-        else:
-            self.fixed_width = 0
 
 def loadStringsCharSet(strings_file):
     '''Load strings from a file, create a set with characters used.'''
@@ -185,7 +253,7 @@ def loadStringsCharSet(strings_file):
 
 
 def makeFontStyleDecl(config):
-    s = "\nfontStyle_t FontStyle_%s = \n" % config.c_fontname
+    s = "\nfontStyle_t FontStyle_%s = \n" % config.font_c_name
     s += "{\n"
     s += "    %d, // Glyph count\n" % (config.last_ascii - config.first_ascii + 1)
     s += "    %d, // First ascii code\n" % config.first_ascii
@@ -193,23 +261,23 @@ def makeFontStyleDecl(config):
     s += "    %d, // Glyph height (bytes)\n" % config.bytes_height
     s += "    %d, // Fixed width or 0 if variable\n" % config.fixed_width
     if config.fixed_width == 0:
-        s += "    %s_Widths,\n" % config.c_fontname
+        s += "    %s_Widths,\n" % config.font_c_name
     else:
         s += "    (void*)0,\n"
-    s += "    %s_Bitmaps,\n" % config.c_fontname
+    s += "    %s_Bitmaps,\n" % config.font_c_name
     if config.chars:
-        s += "    {}_Offsets\n".format(config.c_fontname)
+        s += "    {}_Offsets\n".format(config.font_c_name)
     else:
         s += "    (void*)0,\n"
     s += "};\n"
     return s
 
 def makeFontStyleHeader(config):
-    return "\nextern fontStyle_t FontStyle_%s;" % config.c_fontname
+    return "\nextern fontStyle_t FontStyle_%s;" % config.font_c_name
 
 
 def makeBitmapsOffsetTable(config):
-    s = '\nint8_t {}_Offsets[] = \n{{\n    '.format(config.c_fontname)
+    s = '\nint8_t {}_Offsets[] = \n{{\n    '.format(config.font_c_name)
 
     i = 0
     n = 0
@@ -232,7 +300,7 @@ def makeBitmapsTable(config, img, glyphs):
     size = (config.last_ascii - config.first_ascii + 1) * config.bytes_width * config.bytes_height
     s = "\nstatic const %s %s %s_Bitmaps[] = \n{" % (datatype,
                                                      extra_bitmap_type_specifier,
-                                                     config.c_fontname)
+                                                     config.font_c_name)
     global total_ram
     total_ram += size
 
@@ -263,7 +331,7 @@ def makeBitmapsTable(config, img, glyphs):
 
 def makeWidthsTable(config, glyphs):
     count = config.last_ascii - config.first_ascii + 1
-    s = "\n%s %s_Widths[%u] = \n{" % (datatype, config.c_fontname, count)
+    s = "\n%s %s_Widths[%u] = \n{" % (datatype, config.font_c_name, count)
     i = 0
     global total_ram
     total_ram += count
@@ -295,8 +363,8 @@ def makeWidthsTable(config, glyphs):
 
 def loadFont(config):
     # Open xml
-    print("Reading font description: " + config.font_input)
-    font = minidom.parse(config.font_input)
+    print("Reading font description: " + config.input_file)
+    font = minidom.parse(config.input_file)
 
     # Open page 0 image:
     file = font.getElementsByTagName('page')[0].attributes['file'].value
@@ -440,15 +508,15 @@ if __name__ == "__main__":
     if len(sys.argv) == 2:
         cfgfile = sys.argv[1]
     elif len(sys.argv) == 1:
-        cfgfile = 'bmfont2c.cfg'
+        cfgfile = 'bmfont2c.yml'
     else:
         print("ERROR: Invalid command line arguments\n")
         exit()
 
     if os.path.isfile(cfgfile):
         print('Reading configuration file: {}'.format(cfgfile))
-        cfg = configparser.ConfigParser()
-        cfg.read(cfgfile)
+        with open(cfgfile) as f:
+            cfg = yaml.load(f)
         cfg = Config(cfg)
         processConfig(cfg)
     else:

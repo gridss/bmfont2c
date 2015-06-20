@@ -5,7 +5,7 @@ test: test.o fontlibrary.o
 test.o: test.c fontlibrary.h
 fontlibrary.o: fontlibrary.c
 
-fontlibrary.c fontlibrary.h: liberation.fnt liberation_0.tga bmfont2c.cfg
+fontlibrary.c fontlibrary.h: liberation.fnt liberation_0.tga bmfont2c.yml
 	$(BMFONT2C)
 
 .PHONY: clean

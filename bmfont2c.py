@@ -92,7 +92,6 @@ import os
 import re
 import yaml
 
-datatype = 'uint8_t'
 extra_bitmap_type_specifier = ''
 
 header_start = """
@@ -136,6 +135,7 @@ source_start = """
 
 default_header = 'fontlibrary.h'
 default_source = 'fontlibrary.c'
+default_datatype = 'uint8_t'
 default_first_ascii = 32
 default_last_ascii = 125
 default_crop_x = 0
@@ -166,6 +166,10 @@ class Config:
         if type(self.source) != str:
             raise InvalidConfigException('source should be a string.')
 
+        self.datatype = cfg.get('datatype', default_datatype)
+        if type(self.datatype) != str:
+            raise InvalidConfigException('datatype should be a string.')
+
         if 'fonts' not in cfg:
             raise InvalidConfigException('no fonts defined')
 
@@ -177,12 +181,13 @@ class Config:
                 e = 'value of font {} should be a dictionary'
                 raise InvalidConfigException(e.format(font_c_name))
 
-            self.font_configs.append(FontConfig(font_c_name, font_cfg))
+            self.font_configs.append(FontConfig(self, font_c_name, font_cfg))
 
 
 class FontConfig:
 
-    def __init__(self, font_c_name, cfg):
+    def __init__(self, parent, font_c_name, cfg):
+        self.parent = parent
         self.font_c_name = font_c_name
 
         if 'input-file' not in cfg:
@@ -284,7 +289,7 @@ def makeBitmapsOffsetTable(config):
     return s
 
 def makeBitmapsTable(config, img, glyphs):
-    s = "\nstatic const %s %s %s_Bitmaps[] = \n{" % (datatype,
+    s = "\nstatic const %s %s %s_Bitmaps[] = \n{" % (config.parent.datatype,
                                                      extra_bitmap_type_specifier,
                                                      config.font_c_name)
 
@@ -318,7 +323,7 @@ def makeBitmapsTable(config, img, glyphs):
 
 def makeWidthsTable(config, glyphs):
     count = config.last_ascii - config.first_ascii + 1
-    s = "\n%s %s_Widths[%u] = \n{" % (datatype, config.font_c_name, count)
+    s = "\n%s %s_Widths[%u] = \n{" % (config.parent.datatype, config.font_c_name, count)
     i = 0
 
     for ascii in range(config.first_ascii, config.last_ascii + 1):
@@ -389,7 +394,7 @@ def makeFontSource(config):
 def processConfig(cfg):
 
     # Start up the header and source file
-    header = header_start.format(datatype=datatype)
+    header = header_start.format(datatype=cfg.datatype)
     source = source_start
     source += '#include "{}"\n'.format(cfg.header)
 

@@ -475,7 +475,7 @@ class Glyph:
                 s += pixel
             print(s)
 
-    def makeBitmapCode(self, img, width, height, crop_x = 0, crop_y = 0):
+    def makeBitmapCode(self, img, width, height, crop_x, crop_y):
         s = '\n    // ASCII: %d, char width: %d' % (self.id, self.xadvance)
         for y in range(0, height):
             comment = ""

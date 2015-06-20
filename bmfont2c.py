@@ -383,6 +383,14 @@ def loadFont(config):
 def makeFontSource(config):
     img, glyphs = loadFont(config)
 
+    if config.bytes_height == default_bytes_height:
+        # Auto-compute required height
+        max_height = 0
+        for g in glyphs:
+            max_height = max(max_height, g.height)
+        config.bytes_height = max_height
+        print('Auto-detected required height of {}px'.format(max_height))
+
     source = makeBitmapsTable(config, img, glyphs)
 
     if config.fixed_width == 0:
@@ -434,6 +442,12 @@ class Glyph:
         self.xoffset  = int(char.attributes['xoffset'].value)
         self.yoffset  = int(char.attributes['yoffset'].value)
         self.xadvance = int(char.attributes['xadvance'].value)
+
+    def __str__(self):
+        return 'Glyph(id={} {}, x={}, y={}, w={}, h={})'.format(
+            self.id, chr(self.id),
+            self.x, self.y,
+            self.width, self.height)
 
     def printRaw(self, img):
         print("id: %d, width: %d, height: %d" % (self.id, self.width, self.height))

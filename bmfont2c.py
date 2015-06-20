@@ -288,7 +288,7 @@ def makeBitmapsOffsetTable(config):
         if i % 8 == 0:
             s += '\n    '
 
-    s += '\n}\n'
+    s += '\n};\n'
 
     return s
 
@@ -298,7 +298,7 @@ def makeBitmapsTable(config, img, glyphs):
                                                      config.font_c_name)
 
     for ascii in range(config.first_ascii, config.last_ascii + 1):
-        if config.chars and char(ascii) not in config.chars:
+        if config.chars and chr(ascii) not in config.chars:
             continue
 
         # Find the glyph

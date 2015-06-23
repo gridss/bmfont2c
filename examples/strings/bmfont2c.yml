@@ -1,0 +1,4 @@
+fonts:
+  Liberation:
+    input-file: liberation.fnt
+    strings-file: strings.txt
